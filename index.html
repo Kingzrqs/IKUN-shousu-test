@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>准度测试游戏</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #0a0a14;
+    color: #eee;
+    min-height: 100vh;
+    padding: 20px;
+    user-select: none;
+    position: relative;
+  }
+  #bgVideo {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -2;
+    filter: brightness(0.55) saturate(1.1);
+  }
+  #bgOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(135deg, rgba(26,26,46,0.45) 0%, rgba(22,33,62,0.4) 50%, rgba(15,52,96,0.45) 100%);
+    pointer-events: none;
+  }
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+  }
+  h1 {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-size: 28px;
+    background: linear-gradient(90deg, #00d4ff, #ff00aa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
+  }
+  .game-area {
+    position: relative;
+    background: rgba(10, 15, 30, 0.25);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(0, 212, 255, 0.35);
+    border-radius: 12px;
+    height: 600px;
+    overflow: hidden;
+    cursor: crosshair;
+    box-shadow: 0 0 30px rgba(0, 212, 255, 0.15) inset, 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .ball {
+    position: absolute;
+    border-radius: 50%;
+    cursor: pointer;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 18px rgba(255, 255, 255, 0.6);
+    animation: pop 0.18s ease-out;
+  }
+  @keyframes pop {
+    from { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+    to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  }
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+  }
+  .hit-effect {
+    position: absolute;
+    color: #00ff88;
+    font-weight: bold;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    animation: floatUp 0.7s ease-out forwards;
+    text-shadow: 0 0 8px #00ff88;
+  }
+  .miss-effect {
+    color: #ff4477;
+    text-shadow: 0 0 8px #ff4477;
+  }
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -150%) scale(1.4); }
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .overlay h2 { font-size: 32px; color: #00d4ff; }
+  .btn {
+    padding: 12px 36px;
+    font-size: 16px;
+    background: linear-gradient(135deg, #00d4ff, #0066ff);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: transform 0.1s;
+  }
+  .btn:hover { transform: scale(1.05); }
+  .btn:active { transform: scale(0.97); }
+  .btn.secondary {
+    background: linear-gradient(135deg, #ff00aa, #aa00ff);
+  }
+  .btn.rage {
+    width: 100%;
+    margin-top: 12px;
+    background: linear-gradient(135deg, #00d4ff, #0066ff);
+    letter-spacing: 2px;
+    font-size: 17px;
+    box-shadow: 0 0 18px rgba(0, 150, 255, 0.35);
+  }
+  .btn.rage.active {
+    background: linear-gradient(135deg, #ff0044, #ff3300);
+    box-shadow: 0 0 20px rgba(255, 80, 0, 0.4);
+    animation: ragePulse 1.2s ease-in-out infinite;
+  }
+  @keyframes ragePulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(255, 60, 0, 0.5); }
+    50%      { box-shadow: 0 0 36px rgba(255, 100, 0, 0.9); }
+  }
+  body.rage-mode .diff-btn[data-diff="easy"],
+  body.rage-mode .diff-btn[data-diff="normal"] {
+    display: none;
+  }
+  body:not(.rage-mode) .diff-btn[data-diff="truefan"] {
+    display: none;
+  }
+  .diff-btn.truefan {
+    color: #ffb3d9;
+    border-color: rgba(255, 100, 180, 0.5);
+    background: rgba(255, 50, 130, 0.1);
+  }
+  .diff-btn.truefan.active {
+    background: linear-gradient(135deg, #ff66aa44, #ff009955);
+    border-color: #ff4499;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(255, 80, 170, 0.5);
+  }
+  .panel {
+    position: relative;
+    background: rgba(10, 15, 30, 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  }
+  .panel h3 {
+    color: #00d4ff;
+    font-size: 14px;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+    padding-bottom: 8px;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 0;
+    font-size: 14px;
+  }
+  .stat-label { color: #999; }
+  .stat-value {
+    font-weight: bold;
+    font-family: "Consolas", monospace;
+    font-size: 16px;
+    color: #fff;
+  }
+  .stat-value.good { color: #00ff88; }
+  .stat-value.bad { color: #ff4477; }
+  .stat-value.warn { color: #ffaa00; }
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .difficulty {
+    display: flex;
+    gap: 6px;
+  }
+  .diff-btn {
+    flex: 1;
+    padding: 8px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #ccc;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .diff-btn.active {
+    background: linear-gradient(135deg, #00d4ff44, #0066ff44);
+    border-color: #00d4ff;
+    color: #fff;
+  }
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: rgba(10, 15, 30, 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+  .topbar span { color: #ccc; }
+  .topbar b { color: #00d4ff; font-family: "Consolas", monospace; font-size: 16px; }
+  #audioCtrl {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(0,212,255,0.3);
+    border-radius: 999px;
+  }
+  #audioCtrl button {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+    transition: transform 0.1s;
+  }
+  #audioCtrl button:hover { transform: scale(1.15); }
+  #audioCtrl button:active { transform: scale(0.9); }
+  #volSlider {
+    width: 70px;
+    accent-color: #00d4ff;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<video id="bgVideo" autoplay loop muted playsinline src="assets/bg.mp4"></video>
+<audio id="bgAudio" loop preload="auto"></audio>
+<div id="bgOverlay"></div>
+<div class="container">
+  <h1>🎯 准度测试游戏 · Accuracy Trainer</h1>
+
+  <div>
+    <div class="topbar">
+      <span>时间剩余: <b id="timer">30</b>s</span>
+      <span>得分: <b id="score">0</b></span>
+      <span>连击: <b id="combo">0</b></span>
+    </div>
+    <div class="game-area" id="gameArea">
+      <div class="overlay" id="overlay">
+        <h2>准备好了吗？</h2>
+        <p style="color:#aaa; max-width:400px; text-align:center;">
+          屏幕上会随机出现小球，尽可能快速、准确地点击它们。<br>
+          球点击得越准 (越靠近圆心) 精度越高。
+        </p>
+        <button class="btn" id="startBtn">开始游戏</button>
+      </div>
+    </div>
+    <button class="btn rage" id="rageBtn">普通模式</button>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h3>实时数据</h3>
+      <div id="audioCtrl" title="背景音乐">
+        <button id="playBtn" title="播放/暂停">▶</button>
+        <button id="muteBtn" title="静音">🔊</button>
+        <input id="volSlider" type="range" min="0" max="100" value="40">
+      </div>
+      <div class="stat-row"><span class="stat-label">命中 / 出现</span><span class="stat-value" id="hitCount">0 / 0</span></div>
+      <div class="stat-row"><span class="stat-label">命中率</span><span class="stat-value" id="hitRate">--</span></div>
+      <div class="stat-row"><span class="stat-label">本次反应</span><span class="stat-value" id="lastReact">-- ms</span></div>
+      <div class="stat-row"><span class="stat-label">平均反应</span><span class="stat-value" id="avgReact">-- ms</span></div>
+      <div class="stat-row"><span class="stat-label">最快反应</span><span class="stat-value good" id="bestReact">-- ms</span></div>
+      <div class="stat-row"><span class="stat-label">最慢反应</span><span class="stat-value bad" id="worstReact">-- ms</span></div>
+    </div>
+
+    <div class="panel" style="margin-top:14px;">
+      <h3>精度数据</h3>
+      <div class="stat-row"><span class="stat-label">本次精度</span><span class="stat-value" id="lastAcc">-- %</span></div>
+      <div class="stat-row"><span class="stat-label">平均精度</span><span class="stat-value" id="avgAcc">-- %</span></div>
+      <div class="stat-row"><span class="stat-label">最高连击</span><span class="stat-value warn" id="maxCombo">0</span></div>
+      <div class="stat-row"><span class="stat-label">综合评分</span><span class="stat-value" id="grade">--</span></div>
+    </div>
+
+    <div class="panel controls">
+      <h3>难度设置</h3>
+      <div class="difficulty">
+        <button class="diff-btn active" data-diff="easy">简单</button>
+        <button class="diff-btn" data-diff="normal">普通</button>
+        <button class="diff-btn" data-diff="hard">困难</button>
+        <button class="diff-btn" data-diff="insane">疯狂</button>
+        <button class="diff-btn truefan" data-diff="truefan">真爱粉</button>
+      </div>
+      <button class="btn secondary" id="resetBtn">重置统计</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DIFF = {
+  easy:   { size: 110, life: 4000, spawn: 1500, dur: 30 },
+  normal: { size: 65, life: 2400, spawn: 950,  dur: 30 },
+  hard:   { size: 48, life: 1800, spawn: 700,  dur: 30 },
+  insane: { size: 34, life: 1300, spawn: 500,  dur: 30 },
+  truefan: {
+    dynamic: true,
+    startSize: 60, endSize: 20,
+    startLife: 1800, endLife: 450,
+    startSpawn: 1000, endSpawn: 120,
+    dur: 120
+  },
+};
+function getDynCfg() {
+  const cfg = DIFF[currentDiff];
+  if (!cfg.dynamic) return cfg;
+  const elapsed = cfg.dur - state.timeLeft;
+  const t = Math.min(1, Math.max(0, elapsed / cfg.dur));
+  return {
+    dynamic: true,
+    size:  cfg.startSize  + (cfg.endSize  - cfg.startSize)  * t,
+    life:  cfg.startLife  + (cfg.endLife  - cfg.startLife)  * t,
+    spawn: cfg.startSpawn + (cfg.endSpawn - cfg.startSpawn) * t,
+    dur: cfg.dur,
+  };
+}
+
+const $ = id => document.getElementById(id);
+const gameArea = $("gameArea");
+const overlay = $("overlay");
+
+let state = null;
+let currentDiff = "easy";
+
+function resetStats() {
+  state = {
+    running: false,
+    score: 0,
+    spawned: 0,
+    hit: 0,
+    missed: 0,
+    combo: 0,
+    maxCombo: 0,
+    reactTimes: [],
+    accuracies: [],
+    timeLeft: DIFF[currentDiff].dur,
+    balls: new Map(),
+    nextBallId: 0,
+    spawnTimer: null,
+    countdownTimer: null,
+  };
+  render();
+}
+
+function fmt(n, digits = 0) {
+  if (n === null || n === undefined || isNaN(n)) return "--";
+  return Number(n).toFixed(digits);
+}
+
+function render() {
+  $("score").textContent = state.score;
+  $("combo").textContent = state.combo;
+  $("maxCombo").textContent = state.maxCombo;
+  $("timer").textContent = state.timeLeft;
+  $("hitCount").textContent = `${state.hit} / ${state.spawned}`;
+
+  const rate = state.spawned ? (state.hit / state.spawned) * 100 : null;
+  $("hitRate").textContent = rate === null ? "--" : fmt(rate, 1) + " %";
+  applyColor($("hitRate"), rate, 80, 50);
+
+  const last = state.reactTimes.length ? state.reactTimes[state.reactTimes.length-1] : null;
+  $("lastReact").textContent = last === null ? "-- ms" : fmt(last) + " ms";
+
+  if (state.reactTimes.length) {
+    const avg = state.reactTimes.reduce((a,b)=>a+b,0) / state.reactTimes.length;
+    const best = Math.min(...state.reactTimes);
+    const worst = Math.max(...state.reactTimes);
+    $("avgReact").textContent = fmt(avg) + " ms";
+    $("bestReact").textContent = fmt(best) + " ms";
+    $("worstReact").textContent = fmt(worst) + " ms";
+    applyColor($("avgReact"), -avg, -400, -700);
+  } else {
+    $("avgReact").textContent = $("bestReact").textContent = $("worstReact").textContent = "-- ms";
+  }
+
+  if (state.accuracies.length) {
+    const lastA = state.accuracies[state.accuracies.length-1];
+    const avgA = state.accuracies.reduce((a,b)=>a+b,0) / state.accuracies.length;
+    $("lastAcc").textContent = fmt(lastA, 1) + " %";
+    $("avgAcc").textContent = fmt(avgA, 1) + " %";
+    applyColor($("lastAcc"), lastA, 80, 50);
+    applyColor($("avgAcc"), avgA, 80, 50);
+  } else {
+    $("lastAcc").textContent = $("avgAcc").textContent = "-- %";
+  }
+
+  $("grade").textContent = computeGrade();
+}
+
+function applyColor(el, val, goodT, badT) {
+  el.classList.remove("good","bad","warn");
+  if (val === null || val === undefined || isNaN(val)) return;
+  if (val >= goodT) el.classList.add("good");
+  else if (val >= badT) el.classList.add("warn");
+  else el.classList.add("bad");
+}
+
+function computeGrade() {
+  if (!state.reactTimes.length || !state.accuracies.length) return "--";
+  const avgReact = state.reactTimes.reduce((a,b)=>a+b,0) / state.reactTimes.length;
+  const avgAcc = state.accuracies.reduce((a,b)=>a+b,0) / state.accuracies.length;
+  const hitRate = state.hit / Math.max(1, state.spawned) * 100;
+  const reactScore = Math.max(0, 100 - (avgReact - 200) / 8);
+  const total = reactScore * 0.35 + avgAcc * 0.35 + hitRate * 0.3;
+  const el = $("grade");
+  el.classList.remove("good","bad","warn");
+  let g;
+  if (total >= 90) { g = "S"; el.classList.add("good"); }
+  else if (total >= 80) { g = "A"; el.classList.add("good"); }
+  else if (total >= 70) { g = "B"; el.classList.add("warn"); }
+  else if (total >= 55) { g = "C"; el.classList.add("warn"); }
+  else { g = "D"; el.classList.add("bad"); }
+  return `${g} (${fmt(total,1)})`;
+}
+
+function spawnBall() {
+  if (!state.running) return;
+  const cfg = getDynCfg();
+  const rect = gameArea.getBoundingClientRect();
+  const r = cfg.size / 2;
+  const x = r + 8 + Math.random() * (rect.width - 2*r - 16);
+  const y = r + 8 + Math.random() * (rect.height - 2*r - 16);
+  const id = state.nextBallId++;
+  const ball = document.createElement("div");
+  ball.className = "ball";
+  ball.style.width = ball.style.height = cfg.size + "px";
+  ball.style.left = x + "px";
+  ball.style.top = y + "px";
+  const hue = Math.floor(Math.random()*360);
+  ball.style.background = `radial-gradient(circle at 30% 30%, hsl(${hue},100%,75%), hsl(${hue},100%,45%))`;
+  ball.dataset.id = id;
+  ball.dataset.x = x;
+  ball.dataset.y = y;
+  ball.dataset.r = r;
+  ball.dataset.born = performance.now();
+  gameArea.appendChild(ball);
+
+  ball.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    hitBall(id, e.clientX, e.clientY);
+  });
+
+  state.spawned++;
+  state.balls.set(id, { el: ball, timeout: setTimeout(() => missBall(id), cfg.life) });
+  render();
+}
+
+function hitBall(id, cx, cy) {
+  const data = state.balls.get(id);
+  if (!data) return;
+  clearTimeout(data.timeout);
+  const ball = data.el;
+  const rect = gameArea.getBoundingClientRect();
+  const x = parseFloat(ball.dataset.x);
+  const y = parseFloat(ball.dataset.y);
+  const r = parseFloat(ball.dataset.r);
+  const born = parseFloat(ball.dataset.born);
+  const clickX = cx - rect.left;
+  const clickY = cy - rect.top;
+  const dist = Math.hypot(clickX - x, clickY - y);
+  const acc = Math.max(0, (1 - dist / r) * 100);
+  const react = performance.now() - born;
+
+  state.hit++;
+  state.combo++;
+  state.maxCombo = Math.max(state.maxCombo, state.combo);
+  state.reactTimes.push(react);
+  state.accuracies.push(acc);
+  state.score += Math.round(acc + (1000 / Math.max(react, 100)) * 20 + state.combo * 2);
+
+  showEffect(x, y, `+${Math.round(acc)}% · ${Math.round(react)}ms`, false);
+  ball.remove();
+  state.balls.delete(id);
+  render();
+}
+
+function missBall(id) {
+  const data = state.balls.get(id);
+  if (!data) return;
+  const ball = data.el;
+  const x = parseFloat(ball.dataset.x);
+  const y = parseFloat(ball.dataset.y);
+  state.missed++;
+  state.combo = 0;
+  showEffect(x, y, "MISS", true);
+  ball.remove();
+  state.balls.delete(id);
+  render();
+}
+
+function showEffect(x, y, text, miss) {
+  const el = document.createElement("div");
+  el.className = "hit-effect" + (miss ? " miss-effect" : "");
+  el.style.left = x + "px";
+  el.style.top = y + "px";
+  el.textContent = text;
+  gameArea.appendChild(el);
+  setTimeout(() => el.remove(), 700);
+}
+
+function scheduleNextSpawn() {
+  if (!state.running) return;
+  const cfg = getDynCfg();
+  state.spawnTimer = setTimeout(() => {
+    spawnBall();
+    scheduleNextSpawn();
+  }, cfg.spawn);
+}
+
+function start() {
+  resetStats();
+  state.running = true;
+  overlay.style.display = "none";
+  spawnBall();
+  scheduleNextSpawn();
+  state.countdownTimer = setInterval(() => {
+    state.timeLeft = Math.max(0, state.timeLeft - 1);
+    render();
+    if (state.timeLeft <= 0) stop();
+  }, 1000);
+}
+
+function stop() {
+  state.running = false;
+  clearTimeout(state.spawnTimer);
+  clearInterval(state.countdownTimer);
+  for (const { el, timeout } of state.balls.values()) {
+    clearTimeout(timeout);
+    el.remove();
+  }
+  state.balls.clear();
+  render();
+  showReport();
+}
+
+function showReport() {
+  const avgReact = state.reactTimes.length ? state.reactTimes.reduce((a,b)=>a+b,0)/state.reactTimes.length : 0;
+  const avgAcc = state.accuracies.length ? state.accuracies.reduce((a,b)=>a+b,0)/state.accuracies.length : 0;
+  const best = state.reactTimes.length ? Math.min(...state.reactTimes) : 0;
+  const hitRate = state.spawned ? state.hit / state.spawned * 100 : 0;
+  overlay.innerHTML = `
+    <h2>本局结束</h2>
+    <div style="display:grid; grid-template-columns: auto auto; gap:6px 24px; font-size:15px; color:#ccc;">
+      <span>得分</span><b style="color:#00d4ff">${state.score}</b>
+      <span>命中率</span><b>${fmt(hitRate,1)} %</b>
+      <span>平均反应</span><b>${fmt(avgReact)} ms</b>
+      <span>最快反应</span><b style="color:#00ff88">${fmt(best)} ms</b>
+      <span>平均精度</span><b>${fmt(avgAcc,1)} %</b>
+      <span>最高连击</span><b style="color:#ffaa00">${state.maxCombo}</b>
+      <span>综合评分</span><b>${computeGrade()}</b>
+    </div>
+    <button class="btn" id="restartBtn">再来一局</button>
+  `;
+  overlay.style.display = "flex";
+  $("restartBtn").onclick = start;
+}
+
+document.querySelectorAll(".diff-btn").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".diff-btn").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    currentDiff = b.dataset.diff;
+    if (state && state.running) {
+      state.running = false;
+      clearTimeout(state.spawnTimer);
+      clearInterval(state.countdownTimer);
+      for (const { el, timeout } of state.balls.values()) { clearTimeout(timeout); el.remove(); }
+      state.balls.clear();
+    }
+    resetStats();
+    state.timeLeft = DIFF[currentDiff].dur;
+    render();
+    showReadyOverlay();
+  });
+});
+
+$("startBtn").onclick = start;
+$("resetBtn").onclick = () => {
+  if (state && state.running) stop();
+  resetStats();
+  overlay.innerHTML = `
+    <h2>准备好了吗？</h2>
+    <p style="color:#aaa; max-width:400px; text-align:center;">屏幕上会随机出现小球，尽可能快速、准确地点击它们。<br>球点击得越准 (越靠近圆心) 精度越高。</p>
+    <button class="btn" id="startBtn2">开始游戏</button>
+  `;
+  overlay.style.display = "flex";
+  $("startBtn2").onclick = start;
+};
+
+resetStats();
+
+const rageBtn = $("rageBtn");
+const bgVideo = $("bgVideo");
+let rageOn = false;
+let rageAutoStartTimer = null;
+
+function setDiff(diff) {
+  document.querySelectorAll(".diff-btn").forEach(x => x.classList.remove("active"));
+  document.querySelector(`.diff-btn[data-diff="${diff}"]`).classList.add("active");
+  currentDiff = diff;
+}
+
+function showReadyOverlay() {
+  overlay.innerHTML = `
+    <h2>准备好了吗？</h2>
+    <p style="color:#aaa; max-width:400px; text-align:center;">
+      屏幕上会随机出现小球，尽可能快速、准确地点击它们。<br>
+      球点击得越准 (越靠近圆心) 精度越高。
+    </p>
+    <button class="btn" id="startBtn">开始游戏</button>
+  `;
+  overlay.style.display = "flex";
+  $("startBtn").onclick = start;
+}
+
+function showRageCountdown() {
+  overlay.innerHTML = `
+    <h2 style="color:#ff5500; text-shadow: 0 0 14px #ff5500;">🔥 狂暴模式</h2>
+    <p style="color:#ffaa66; font-size:18px;">即将开始 · <span id="rageNum">2</span>s</p>
+  `;
+  overlay.style.display = "flex";
+}
+
+rageBtn.addEventListener("click", () => {
+  rageOn = !rageOn;
+  document.body.classList.toggle("rage-mode", rageOn);
+  rageBtn.classList.toggle("active", rageOn);
+  rageBtn.textContent = rageOn ? "狂暴模式" : "普通模式";
+
+  // 切视频和音乐
+  bgVideo.src = rageOn ? "assets/rage.mp4" : "assets/bg.mp4";
+  bgVideo.load();
+  bgVideo.play().catch(()=>{});
+  const wasPlaying = !bgAudio.paused;
+  bgAudio.src = rageOn ? "assets/rage.mp3" : "assets/bgm.wav";
+  bgAudio.load();
+  if (wasPlaying) bgAudio.play().catch(()=>{});
+
+  // 默认难度：普通模式→简单，狂暴模式→困难
+  setDiff(rageOn ? "hard" : "easy");
+
+  // 停止当前游戏并重置
+  if (rageAutoStartTimer) { clearTimeout(rageAutoStartTimer); rageAutoStartTimer = null; }
+  if (state && state.running) {
+    state.running = false;
+    clearTimeout(state.spawnTimer);
+    clearInterval(state.countdownTimer);
+    for (const { el, timeout } of state.balls.values()) { clearTimeout(timeout); el.remove(); }
+    state.balls.clear();
+  }
+  resetStats();
+  render();
+
+  if (rageOn) {
+    // 狂暴模式：显示 2 秒倒计时后自动开始
+    showRageCountdown();
+    let n = 2;
+    const tick = setInterval(() => {
+      n--;
+      const el = $("rageNum");
+      if (el) el.textContent = n;
+      if (n <= 0) clearInterval(tick);
+    }, 1000);
+    rageAutoStartTimer = setTimeout(() => {
+      rageAutoStartTimer = null;
+      clearInterval(tick);
+      start();
+    }, 2000);
+  } else {
+    // 普通模式：回到准备界面
+    showReadyOverlay();
+  }
+});
+
+const bgAudio = $("bgAudio");
+const playBtn = $("playBtn");
+const muteBtn = $("muteBtn");
+const volSlider = $("volSlider");
+bgAudio.src = "assets/bgm.wav";
+bgAudio.volume = 0.4;
+
+function tryPlayMusic() {
+  bgAudio.play().catch(()=>{});
+}
+function updatePlayIcon() {
+  playBtn.textContent = bgAudio.paused ? "▶" : "⏸";
+}
+bgAudio.addEventListener("play", updatePlayIcon);
+bgAudio.addEventListener("pause", updatePlayIcon);
+
+playBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (bgAudio.paused) tryPlayMusic();
+  else bgAudio.pause();
+});
+volSlider.addEventListener("input", () => {
+  bgAudio.volume = volSlider.value / 100;
+  if (bgAudio.volume > 0) { bgAudio.muted = false; muteBtn.textContent = "🔊"; }
+});
+muteBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  bgAudio.muted = !bgAudio.muted;
+  muteBtn.textContent = bgAudio.muted ? "🔇" : "🔊";
+  if (!bgAudio.muted && bgAudio.paused) tryPlayMusic();
+});
+// 首次任何用户交互后尝试播放（绕过 autoplay 限制）
+const kickOff = () => { tryPlayMusic(); document.removeEventListener("pointerdown", kickOff); };
+document.addEventListener("pointerdown", kickOff);
+
+const _startOrig = start;
+start = function() { tryPlayMusic(); _startOrig(); };
+$("startBtn").onclick = start;
+</script>
+</body>
+</html>
