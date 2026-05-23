@@ -58,7 +58,7 @@
 ├── index.html        # 游戏主文件
 ├── assets/
 │   ├── bg.mp4        # 普通模式背景视频
-│   ├── bgm.wav       # 普通模式背景音乐
+│   ├── bgm.mp3       # 普通模式背景音乐
 │   ├── rage.mp4      # 狂暴模式背景视频
 │   └── rage.mp3      # 狂暴模式背景音乐
 └── README.md

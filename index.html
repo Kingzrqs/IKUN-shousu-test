@@ -675,7 +675,7 @@ rageBtn.addEventListener("click", () => {
   bgVideo.load();
   bgVideo.play().catch(()=>{});
   const wasPlaying = !bgAudio.paused;
-  bgAudio.src = rageOn ? "assets/rage.mp3" : "assets/bgm.wav";
+  bgAudio.src = rageOn ? "assets/rage.mp3" : "assets/bgm.mp3";
   bgAudio.load();
   if (wasPlaying) bgAudio.play().catch(()=>{});
 
@@ -719,7 +719,7 @@ const bgAudio = $("bgAudio");
 const playBtn = $("playBtn");
 const muteBtn = $("muteBtn");
 const volSlider = $("volSlider");
-bgAudio.src = "assets/bgm.wav";
+bgAudio.src = "assets/bgm.mp3";
 bgAudio.volume = 0.4;
 
 function tryPlayMusic() {
