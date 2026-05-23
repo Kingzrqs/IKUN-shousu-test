@@ -14,7 +14,7 @@
     user-select: none;
     position: relative;
   }
-  #bgVideo {
+  .bg-video {
     position: fixed;
     inset: 0;
     width: 100%;
@@ -22,7 +22,10 @@
     object-fit: cover;
     z-index: -2;
     filter: brightness(0.55) saturate(1.1);
+    opacity: 0;
+    transition: opacity 0.35s ease;
   }
+  .bg-video.active { opacity: 1; }
   #bgOverlay {
     position: fixed;
     inset: 0;
@@ -267,8 +270,10 @@
 </style>
 </head>
 <body>
-<video id="bgVideo" autoplay loop muted playsinline src="assets/bg.mp4"></video>
-<audio id="bgAudio" loop preload="auto"></audio>
+<video id="bgVideoNormal" class="bg-video active" autoplay loop muted playsinline preload="auto" src="assets/bg.mp4"></video>
+<video id="bgVideoRage"   class="bg-video"        loop muted playsinline preload="auto" src="assets/rage.mp4"></video>
+<audio id="audioNormal" loop preload="auto" src="assets/bgm.mp3"></audio>
+<audio id="audioRage"   loop preload="auto" src="assets/rage.mp3"></audio>
 <div id="bgOverlay"></div>
 <div class="container">
   <h1>🎯 准度测试游戏 · Accuracy Trainer</h1>
@@ -633,9 +638,13 @@ $("resetBtn").onclick = () => {
 resetStats();
 
 const rageBtn = $("rageBtn");
-const bgVideo = $("bgVideo");
+const bgVideoNormal = $("bgVideoNormal");
+const bgVideoRage   = $("bgVideoRage");
 let rageOn = false;
 let rageAutoStartTimer = null;
+
+// 让 rage 视频也尽早进入"已缓冲"状态（autoplay+muted 是 OK 的，display 由 opacity 控制）
+bgVideoRage.play().then(() => bgVideoRage.pause()).catch(()=>{});
 
 function setDiff(diff) {
   document.querySelectorAll(".diff-btn").forEach(x => x.classList.remove("active"));
@@ -670,14 +679,25 @@ rageBtn.addEventListener("click", () => {
   rageBtn.classList.toggle("active", rageOn);
   rageBtn.textContent = rageOn ? "狂暴模式" : "普通模式";
 
-  // 切视频和音乐
-  bgVideo.src = rageOn ? "assets/rage.mp4" : "assets/bg.mp4";
-  bgVideo.load();
-  bgVideo.play().catch(()=>{});
-  const wasPlaying = !bgAudio.paused;
-  bgAudio.src = rageOn ? "assets/rage.mp3" : "assets/bgm.mp3";
-  bgAudio.load();
-  if (wasPlaying) bgAudio.play().catch(()=>{});
+  // 切视频：仅切换 active 类，opacity 淡入淡出，零加载延迟
+  const vShow = rageOn ? bgVideoRage   : bgVideoNormal;
+  const vHide = rageOn ? bgVideoNormal : bgVideoRage;
+  vShow.classList.add("active");
+  vHide.classList.remove("active");
+  vShow.play().catch(()=>{});
+  // 隐藏的视频继续静音循环也行，但暂停省点 CPU
+  vHide.pause();
+
+  // 切音乐：双音轨快速 crossfade（共享音量/静音状态）
+  const aShow = rageOn ? audioRage   : audioNormal;
+  const aHide = rageOn ? audioNormal : audioRage;
+  const wasPlaying = !aHide.paused || musicWantsPlay;
+  aShow.muted = aHide.muted;
+  aShow.volume = aHide.volume;
+  aHide.pause();
+  currentAudio = aShow;
+  if (wasPlaying) aShow.play().catch(()=>{});
+  updatePlayIcon();
 
   // 默认难度：普通模式→简单，狂暴模式→困难
   setDiff(rageOn ? "hard" : "easy");
@@ -715,36 +735,46 @@ rageBtn.addEventListener("click", () => {
   }
 });
 
-const bgAudio = $("bgAudio");
+const audioNormal = $("audioNormal");
+const audioRage   = $("audioRage");
+let currentAudio = audioNormal;
+let musicWantsPlay = false; // 用户是否希望播放音乐（用于切换/首次交互）
 const playBtn = $("playBtn");
 const muteBtn = $("muteBtn");
 const volSlider = $("volSlider");
-bgAudio.src = "assets/bgm.mp3";
-bgAudio.volume = 0.4;
+audioNormal.volume = audioRage.volume = 0.4;
 
 function tryPlayMusic() {
-  bgAudio.play().catch(()=>{});
+  musicWantsPlay = true;
+  currentAudio.play().catch(()=>{});
 }
 function updatePlayIcon() {
-  playBtn.textContent = bgAudio.paused ? "▶" : "⏸";
+  playBtn.textContent = currentAudio.paused ? "▶" : "⏸";
 }
-bgAudio.addEventListener("play", updatePlayIcon);
-bgAudio.addEventListener("pause", updatePlayIcon);
+[audioNormal, audioRage].forEach(a => {
+  a.addEventListener("play",  updatePlayIcon);
+  a.addEventListener("pause", updatePlayIcon);
+});
 
 playBtn.addEventListener("click", (e) => {
   e.stopPropagation();
-  if (bgAudio.paused) tryPlayMusic();
-  else bgAudio.pause();
+  if (currentAudio.paused) tryPlayMusic();
+  else { currentAudio.pause(); musicWantsPlay = false; }
 });
 volSlider.addEventListener("input", () => {
-  bgAudio.volume = volSlider.value / 100;
-  if (bgAudio.volume > 0) { bgAudio.muted = false; muteBtn.textContent = "🔊"; }
+  const v = volSlider.value / 100;
+  audioNormal.volume = audioRage.volume = v;
+  if (v > 0) {
+    audioNormal.muted = audioRage.muted = false;
+    muteBtn.textContent = "🔊";
+  }
 });
 muteBtn.addEventListener("click", (e) => {
   e.stopPropagation();
-  bgAudio.muted = !bgAudio.muted;
-  muteBtn.textContent = bgAudio.muted ? "🔇" : "🔊";
-  if (!bgAudio.muted && bgAudio.paused) tryPlayMusic();
+  const m = !currentAudio.muted;
+  audioNormal.muted = audioRage.muted = m;
+  muteBtn.textContent = m ? "🔇" : "🔊";
+  if (!m && currentAudio.paused) tryPlayMusic();
 });
 // 首次任何用户交互后尝试播放（绕过 autoplay 限制）
 const kickOff = () => { tryPlayMusic(); document.removeEventListener("pointerdown", kickOff); };
