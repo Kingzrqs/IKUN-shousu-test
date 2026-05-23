@@ -8,7 +8,9 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-    background: #0a0a14;
+    background:
+      radial-gradient(ellipse at top, #1a1a3e 0%, #0a0a14 60%),
+      linear-gradient(135deg, #0a0a14 0%, #1a1a2e 50%, #0f3460 100%);
     color: #eee;
     min-height: 100vh;
     padding: 20px;
@@ -25,7 +27,11 @@
     filter: brightness(0.55) saturate(1.1);
     opacity: 0;
     transition: opacity 0.35s ease;
+    background-size: cover;
+    background-position: center;
   }
+  #bgVideoNormal { background-image: url("assets/bg_poster.jpg"); }
+  #bgVideoRage   { background-image: url("assets/rage_poster.jpg"); }
   .bg-video.active { opacity: 1; }
   #bgOverlay {
     position: fixed;
@@ -304,8 +310,8 @@
 </style>
 </head>
 <body>
-<video id="bgVideoNormal" class="bg-video active" autoplay loop muted playsinline preload="auto" src="assets/bg.mp4"></video>
-<video id="bgVideoRage"   class="bg-video"        loop muted playsinline preload="auto" src="assets/rage.mp4"></video>
+<video id="bgVideoNormal" class="bg-video active" autoplay loop muted playsinline webkit-playsinline x5-playsinline preload="auto" poster="assets/bg_poster.jpg" src="assets/bg.mp4"></video>
+<video id="bgVideoRage"   class="bg-video"        loop muted playsinline webkit-playsinline x5-playsinline preload="auto" poster="assets/rage_poster.jpg" src="assets/rage.mp4"></video>
 <audio id="audioNormal" loop preload="auto" src="assets/bgm.mp3"></audio>
 <audio id="audioRage"   loop preload="auto" src="assets/rage.mp3"></audio>
 <div id="bgOverlay"></div>
@@ -370,6 +376,12 @@
 </div>
 
 <script>
+// 页面一加载就并发预热所有媒体资源到 HTTP 缓存
+// 对微信/QQ 等内置浏览器特别有效——它们常忽略 preload="auto" 提示
+["assets/bg.mp4","assets/rage.mp4","assets/bgm.mp3","assets/rage.mp3"].forEach(u => {
+  try { fetch(u, { cache: "force-cache" }).catch(()=>{}); } catch(e) {}
+});
+
 const DIFF = {
   easy:   { size: 110, life: 4000, spawn: 1500, dur: 30 },
   normal: { size: 65, life: 2400, spawn: 950,  dur: 30 },
